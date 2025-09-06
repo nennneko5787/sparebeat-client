@@ -1,3 +1,6 @@
+import requests
+import os
+
 from ursina import Ursina
 
 from scenes.game import GameScene
@@ -14,6 +17,16 @@ def load():
     currentScene = GameScene()
 
 
-load()
+print("Loading おぎゃりないざー (6183cb7e)")
 
+os.makedirs("temp/", exist_ok=True)
+with open("temp/audio.mp3", "wb") as f:
+    f.write(
+        requests.get("https://beta.sparebeat.com/api/tracks/6183cb7e/audio").content
+    )
+with open("temp/map.json", "wb") as f:
+    f.write(requests.get("https://beta.sparebeat.com/api/tracks/6183cb7e/map").content)
+
+
+load()
 app.run()

@@ -48,10 +48,10 @@ class Info:
     artist: str
     url: str
     bgColor: List[str]
-    beats: int
     bpm: int
     startTime: int
     level: LevelData
     maps: Dict[
-        Literal["easy", "normal", "hard"], List[Union[Note, LongNote, Change, Division]]
+        Literal["easy", "normal", "hard"],
+        Dict[Literal["notes", "events"], List[Union[Note, LongNote, Division, Change]]],
     ]

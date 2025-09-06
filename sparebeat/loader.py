@@ -1,7 +1,15 @@
 import json
 from typing import Dict, List, Union
 
-from .objects import BindZone, Change, Division, Info, LevelData, LongNote, Note
+from .objects import (
+    BindZone,
+    Change,
+    Division,
+    Info,
+    LevelData,
+    LongNote,
+    Note,
+)
 
 
 def loadFromFile(path: str):
@@ -16,9 +24,8 @@ def loadFromString(content: str):
 def loadFromDict(object: Dict[str, str]):
     title: str = object["title"]
     artist: str = object["artist"]
-    url: str = object["url"]
-    bgColor: List[str] = object["bgColor"]
-    beats: int = object["beats"]
+    url: str = object.get("url", "")
+    bgColor: List[str] = object.get("bgColor", ["#43C6ACCC", "#191654CC"])
     bpm: int = object["bpm"]
     startTime: int = object["startTime"]
     level: Dict[str, int] = object["level"]
@@ -26,16 +33,22 @@ def loadFromDict(object: Dict[str, str]):
     maps: Dict[str, List[Union[Note, LongNote, Change, Division]]] = {}
 
     for difficulty, map in _maps.items():
-        _map = []
-        _long = {}
+        _map = dict()
+        _map["notes"] = []
+        _map["events"] = []
+        _long = [None, None, None, None]
         _bind = None
         _is2x = False
-        _bpm = bpm
-        globalMs = 0
+        _bpm = float(bpm) if isinstance(bpm, str) else bpm
+        globalMs = startTime
 
         for data in map:
+            if _is2x:
+                _beat = 60000 / _bpm / 6
+            else:
+                _beat = 60000 / _bpm / 4
             if isinstance(data, dict):
-                _map.append(
+                _map["events"].append(
                     Change(
                         ms=globalMs,
                         speed=data.get("speed"),
@@ -44,51 +57,67 @@ def loadFromDict(object: Dict[str, str]):
                     )
                 )
                 if data.get("bpm"):
-                    _bpm = data["bpm"]
+                    _bpm = float(data["bpm"]) if isinstance(bpm, str) else data["bpm"]
+                if data.get("barLine"):
+                    _map["notes"].append(Division(ms=globalMs))
 
             elif isinstance(data, str):
                 for char in data:
                     _ichar = int(char) if char.isdigit() else -1
                     _ochar = ord(char)
-                    _beat = 60000 / _bpm / ((beats / 2) if _is2x is True else beats)
 
                     if _ichar >= 1 and _ichar <= 4:
-                        _map.append(Note(ms=globalMs, key=_ichar, attack=False))
+                        _map["notes"].append(
+                            Note(ms=globalMs, key=_ichar - 1, attack=False)
+                        )
 
                     elif _ichar >= 5 and _ichar <= 8:
-                        _map.append(Note(ms=globalMs, key=_ichar - 4, attack=True))
+                        _map["notes"].append(
+                            Note(ms=globalMs, key=_ichar - 4 - 1, attack=True)
+                        )
 
                     elif _ochar >= 97 and _ochar <= 100:
-                        _long[_ochar - 96] = globalMs
+                        _long[_ochar - 97] = globalMs
 
                     elif _ochar >= 101 and _ochar <= 104:
-                        _map.append(
+                        _map["notes"].append(
                             LongNote(
-                                ms=_long[_ochar - 100],
-                                length=(globalMs - _long[_ochar - 100]),
-                                key=_ochar - 100,
+                                ms=_long[_ochar - 101],
+                                length=(globalMs - _long[_ochar - 101]),
+                                key=_ochar - 101,
                             )
                         )
-                        del _long[_ochar - 100]
+                        _long[_ochar - 101] = None
 
                     elif char == "(":
-                        _is2x = True
+                        if not _is2x:
+                            _is2x = True
+                        else:
+                            raise Exception()
 
                     elif char == ")":
-                        _is2x = False
+                        if _is2x:
+                            _is2x = False
+                        else:
+                            raise Exception()
 
                     elif char == "[":
                         _bind = globalMs
 
                     elif char == "]":
-                        _map.append(BindZone(ms=_bind, length=(globalMs - _bind)))
-                        _bind = None
+                        try:
+                            _map["events"].append(
+                                BindZone(ms=_bind, length=(globalMs - _bind))
+                            )
+                            _bind = None
+                        except Exception:
+                            pass
 
                     elif char == ",":
                         globalMs += _beat
 
                 globalMs += _beat
-                _map.append(Division(ms=globalMs))
+                _map["notes"].append(Division(ms=globalMs))
 
         maps[difficulty] = _map
 
@@ -97,7 +126,6 @@ def loadFromDict(object: Dict[str, str]):
         artist=artist,
         url=url,
         bgColor=bgColor,
-        beats=beats,
         bpm=bpm,
         startTime=startTime,
         level=LevelData(
