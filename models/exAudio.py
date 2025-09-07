@@ -50,6 +50,7 @@ class ExAudio:
             if t >= 1.0:
                 # フェード完了
                 self._fade_target = None
+                self.stop()
 
         end = self.pos + frames
         chunk = self.samples[self.pos : end]
@@ -97,7 +98,7 @@ class ExAudio:
     def fadeOut(self, duration: float, target: float = 0.0):
         """
         非ブロッキングでフェードアウトする
-        duration: フェードにかける時間 (秒)
+        duration: フェードにかける時間 (単位わかりません)
         target: 最終的な音量 (0.0 ~ 1.0)
         """
         self._fade_target = target

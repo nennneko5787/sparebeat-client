@@ -17,15 +17,15 @@ def load():
     currentScene = GameScene()
 
 
-print("Loading いざ、参ります (785d7b9f)")
+print("Loading QUEEN (785d7b9f)")
 
 os.makedirs("temp/", exist_ok=True)
 with open("temp/audio.mp3", "wb") as f:
     f.write(
-        requests.get("https://beta.sparebeat.com/api/tracks/372c7c6d/audio").content
+        requests.get("https://beta.sparebeat.com/api/tracks/785d7b9f/audio").content
     )
 with open("temp/map.json", "wb") as f:
-    f.write(requests.get("https://beta.sparebeat.com/api/tracks/372c7c6d/map").content)
+    f.write(requests.get("https://beta.sparebeat.com/api/tracks/785d7b9f/map").content)
 
 
 load()

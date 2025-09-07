@@ -7,7 +7,8 @@ from models.longNote import LNEntity
 from models.exAudio import ExAudio
 from typing import List
 
-from utils import constants, settings
+from utils import constants, settings, theme
+from utils.color import convertToColor
 
 
 class GameScene(Entity):
@@ -100,22 +101,20 @@ class GameScene(Entity):
 
         self.events = sorted(self.chart.maps["hard"]["events"], key=lambda e: e.ms)
 
-        self.clap = Audio("assets/sounds/clap", autoplay=False, loop=False, volume=2.0)
-
         self.audio = ExAudio("temp/audio.mp3", volume=0.5, pitch=1.0)
         self.audio.load()
         self.audio.play()
 
-    def loadNote(self, note: Note):
+    def loadNote(self, note: Note, nowSpeed: float):
         laneSize = self.lane.scale.x / 2
 
         if isinstance(note, Note):
             if not note.attack:
                 entity = Entity(
                     model="diamond",
-                    color=color.rgb32(102, 206, 207)
-                    if note.key in [1, 2]
-                    else color.rgb32(255, 255, 255),
+                    color=convertToColor(
+                        theme.themes[settings.theme].noteColors[note.key]
+                    ),
                     rotation=(0, 0, 0),
                     position=(
                         constants.noteX[note.key],
@@ -130,7 +129,7 @@ class GameScene(Entity):
             else:
                 entity = Entity(
                     model="cube",
-                    color=color.rgb32(231, 74, 74),
+                    color=convertToColor(theme.themes[settings.theme].attackNoteColor),
                     rotation=(0, 0, 0),
                     position=(
                         constants.noteX[note.key],
@@ -212,80 +211,171 @@ class GameScene(Entity):
         return -total if reverse else total
 
     def update(self):
-        if self.audio.playing:
-            currentMs = self.audio.time
-            nowSpeed = 1.0
-            for event in self.events:
-                if isinstance(event, Change):
-                    if event.speed is not None:
-                        if currentMs >= event.ms:
-                            nowSpeed = event.speed
+        if not self.audio.playing:
+            return
 
-            movementPerMs = 0.02 * settings.playSpeed
-            # spawn notes
-            for note in self.chart.maps["hard"]["notes"].copy():
-                if currentMs >= note.ms + 100:
-                    break
-                if (
-                    note.ms - currentMs
-                    < 5000
-                    * ursina.window.aspect_ratio
-                    / settings.playSpeed
-                    / self.audio.pitch
-                    / abs(nowSpeed)
-                    and max(
-                        0, len([e for e in scene.entities if e.model and e.enabled]) - 5
-                    )
-                    < max(70 * abs(nowSpeed), 50)
-                ):
-                    self.loadNote(note)
+        currentMs = self.audio.time
 
-            # move notes — ここを積分方式に変更
-            for note in self.notes.copy():
+        # 現在速度を取得
+        nowSpeed = 1.0
+        for event in self.events:
+            if (
+                isinstance(event, Change)
+                and event.speed is not None
+                and currentMs >= event.ms
+            ):
+                nowSpeed = event.speed
+
+        movementPerMs = 0.03 * settings.playSpeed
+
+        # spawn notes
+        for note in self.chart.maps["hard"]["notes"].copy():
+            if currentMs >= note.ms + 100:
+                break
+            if (
+                note.ms - currentMs
+                < 5000
+                * ursina.window.aspect_ratio
+                / settings.playSpeed
+                / self.audio.pitch
+                / abs(nowSpeed)
+                and max(
+                    0, len([e for e in scene.entities if e.model and e.enabled]) - 5
+                )
+                < max(70 * abs(nowSpeed), 50)
+            ):
+                self.loadNote(note, nowSpeed)
+
+        # move notes
+        for note in self.notes.copy():
+            if isinstance(note, LNEntity):
+                # ノーツ長さ
+                totalLengthY = (
+                    self.integratedSpeedTime(note.ms, note.ms + note.length)
+                    * note.msToY
+                )
+
+                if currentMs < note.ms - 100:
+                    continue
+
+                if note.holding:
+                    if held_keys[settings.reverseKeys[note.key]]:
+                        # 押し続けている場合
+                        progressedY = (
+                            self.integratedSpeedTime(
+                                note.ms, min(currentMs, note.ms + note.length)
+                            )
+                            * note.msToY
+                        )
+                        remainingRatio = max(
+                            0, (totalLengthY - progressedY) / totalLengthY
+                        )
+                        note.updateLength(totalLengthY * remainingRatio)
+                        note.y = -10
+                    else:
+                        # 離した → ミス
+                        note.unload()
+                        destroy(note)
+                        self.notes.remove(note)
+                        print("MISS")
+                        continue
+                elif currentMs - note.ms > 100:
+                    # ヘッドを押し損ね → ミス
+                    note.unload()
+                    destroy(note)
+                    self.notes.remove(note)
+                    print("MISS")
+                    continue
+            else:
+                # 通常ノーツ
                 integrated = self.integratedSpeedTime(note.ms, currentMs)
                 note.y = -10 - (integrated * movementPerMs)
 
+                # 画面外に出たら削除
                 if note.y < -20 * ursina.window.aspect_ratio:
+                    destroy(note)
+                    self.notes.remove(note)
+                    print("MISS")
+
+        # オートプレイ
+        if settings.autoPlay:
+            for note in self.notes.copy():
+                if note.key != -1 and currentMs - note.ms > -120:
                     if isinstance(note, LNEntity):
                         note.unload()
                     destroy(note)
                     self.notes.remove(note)
-                    if note.key != -1:
-                        print("MISS")
-                    continue
+                    print("PERFECT")
 
-            if len(self.notes) <= 0 and len(self.chart.maps["hard"]["notes"]) <= 0:
-                # self.audio.fade_out(0, 3, 3, curve.linear, destroy_on_ended=False)
-                self.audio.fadeOut(3.0, 0)
+        # 全ノーツ終了時のフェードアウト
+        if (
+            len(self.notes) <= 0
+            and len(self.chart.maps["hard"]["notes"]) <= 0
+            and self.audio.playing
+        ):
+            self.audio.fadeOut(0.25 * self.audio.pitch, 0)
 
     def input(self, key: str):
-        keyId = -1
-        if key == "d":
-            keyId = 0
-        if key == "f":
-            keyId = 1
-        if key == "j":
-            keyId = 2
-        if key == "k":
-            keyId = 3
+        try:
+            if key.endswith("up"):
+                keyName = key.split()[0]
+                keyId = settings.keys.get(keyName, -1)
+                if keyId < 0:
+                    return
+                currentMs = self.audio.time
 
-        if keyId >= 0:
-            currentMs = self.audio.time
-            for note in self.notes.copy():
-                if note.key == keyId:
-                    if abs(currentMs - note.ms) < 100:
-                        if abs(currentMs - note.ms) < 35:
+                # LNEntity 終点判定
+                for note in self.notes.copy():
+                    if (
+                        isinstance(note, LNEntity)
+                        and note.key == keyId
+                        and note.holding
+                    ):
+                        # ロングノーツ終点までの時間差
+                        delta = currentMs - (note.ms + note.length)
+
+                        if abs(delta) <= 35:
                             print("PERFECT")
-                        elif currentMs - note.ms > -100:
+                        elif delta > -100:
                             print("RUSH")
                         else:
                             print("COOL")
 
-                        if isinstance(note, LNEntity):
-                            note.unload()
+                        note.unload()
                         destroy(note)
                         self.notes.remove(note)
                         return
+            else:
+                # 通常ノーツ or LNヘッド判定
+                keyId = settings.keys.get(key, -1)
+                if keyId < 0:
+                    return
+
+                currentMs = self.audio.time
+                for note in self.notes.copy():
+                    if note.key != keyId:
+                        continue
+
+                    if isinstance(note, LNEntity):
+                        # ヘッド判定
+                        if not note.holding and abs(currentMs - note.ms) < 100:
+                            note.holding = True
+                            return
+                    else:
+                        # 通常ノーツ判定
+                        if abs(currentMs - note.ms) < 100:
+                            if abs(currentMs - note.ms) < 35:
+                                print("PERFECT")
+                            elif currentMs - note.ms > -100:
+                                print("RUSH")
+                            else:
+                                print("COOL")
+
+                            destroy(note)
+                            self.notes.remove(note)
+                            return
+        except KeyError:
+            pass
 
     def unload(self):
         destroy(self.sky)
