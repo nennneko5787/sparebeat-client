@@ -4,6 +4,7 @@ from ursina.shaders import unlit_shader
 
 from sparebeat import loadFromFile, Note, Change, Division, LongNote
 from models.longNote import LNEntity
+from models.exAudio import ExAudio
 from typing import List
 
 from utils import constants, settings
@@ -99,7 +100,11 @@ class GameScene(Entity):
 
         self.events = sorted(self.chart.maps["hard"]["events"], key=lambda e: e.ms)
 
-        self.audio = Audio("temp/audio", loop=False, autoplay=True, volume=2.0)
+        self.clap = Audio("assets/sounds/clap", autoplay=False, loop=False, volume=2.0)
+
+        self.audio = ExAudio("temp/audio.mp3", volume=0.5, pitch=1.0)
+        self.audio.load()
+        self.audio.play()
 
     def loadNote(self, note: Note):
         laneSize = self.lane.scale.x / 2
@@ -207,8 +212,8 @@ class GameScene(Entity):
         return -total if reverse else total
 
     def update(self):
-        if self.audio.playing == 1:
-            currentMs = self.audio.time * 1000.0
+        if self.audio.playing:
+            currentMs = self.audio.time
             nowSpeed = 1.0
             for event in self.events:
                 if isinstance(event, Change):
@@ -219,15 +224,19 @@ class GameScene(Entity):
             movementPerMs = 0.02 * settings.playSpeed
             # spawn notes
             for note in self.chart.maps["hard"]["notes"].copy():
-                if currentMs >= note.ms:
+                if currentMs >= note.ms + 100:
                     break
                 if (
                     note.ms - currentMs
-                    < 5000 * ursina.window.aspect_ratio / settings.playSpeed
+                    < 5000
+                    * ursina.window.aspect_ratio
+                    / settings.playSpeed
+                    / self.audio.pitch
+                    / abs(nowSpeed)
                     and max(
                         0, len([e for e in scene.entities if e.model and e.enabled]) - 5
                     )
-                    < 70 * abs(nowSpeed)
+                    < max(70 * abs(nowSpeed), 50)
                 ):
                     self.loadNote(note)
 
@@ -237,11 +246,17 @@ class GameScene(Entity):
                 note.y = -10 - (integrated * movementPerMs)
 
                 if note.y < -20 * ursina.window.aspect_ratio:
+                    if isinstance(note, LNEntity):
+                        note.unload()
                     destroy(note)
                     self.notes.remove(note)
+                    if note.key != -1:
+                        print("MISS")
+                    continue
 
             if len(self.notes) <= 0 and len(self.chart.maps["hard"]["notes"]) <= 0:
-                self.audio.fade_out(0, 3, 3, curve.linear, destroy_on_ended=False)
+                # self.audio.fade_out(0, 3, 3, curve.linear, destroy_on_ended=False)
+                self.audio.fadeOut(3.0, 0)
 
     def input(self, key: str):
         keyId = -1
@@ -255,16 +270,19 @@ class GameScene(Entity):
             keyId = 3
 
         if keyId >= 0:
+            currentMs = self.audio.time
             for note in self.notes.copy():
                 if note.key == keyId:
-                    if abs(self.audio.time * 1000 - note.ms) < 100:
-                        if abs(self.audio.time * 1000 - note.ms) < 35:
+                    if abs(currentMs - note.ms) < 100:
+                        if abs(currentMs - note.ms) < 35:
                             print("PERFECT")
-                        elif self.audio.time * 1000 - note.ms > -100:
+                        elif currentMs - note.ms > -100:
                             print("RUSH")
                         else:
                             print("COOL")
 
+                        if isinstance(note, LNEntity):
+                            note.unload()
                         destroy(note)
                         self.notes.remove(note)
                         return

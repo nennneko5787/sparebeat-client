@@ -38,15 +38,20 @@ def loadFromDict(object: Dict[str, str]):
         _map["events"] = []
         _long = [None, None, None, None]
         _bind = None
-        _is2x = False
+        _barLine = True
+        _triplet = False
         _bpm = float(bpm) if isinstance(bpm, str) else bpm
         globalMs = startTime
 
         for data in map:
-            if _is2x:
-                _beat = 60000 / _bpm / 6
-            else:
-                _beat = 60000 / _bpm / 4
+            p = (1e3 / (_bpm / 60)) * 4
+
+            def beat():
+                if _triplet:
+                    return p / 24
+                else:
+                    return p / 16
+
             if isinstance(data, dict):
                 _map["events"].append(
                     Change(
@@ -58,8 +63,7 @@ def loadFromDict(object: Dict[str, str]):
                 )
                 if data.get("bpm"):
                     _bpm = float(data["bpm"]) if isinstance(bpm, str) else data["bpm"]
-                if data.get("barLine"):
-                    _map["notes"].append(Division(ms=globalMs))
+                _barLine = data.get("barLine", _barLine)
 
             elif isinstance(data, str):
                 for char in data:
@@ -90,16 +94,10 @@ def loadFromDict(object: Dict[str, str]):
                         _long[_ochar - 101] = None
 
                     elif char == "(":
-                        if not _is2x:
-                            _is2x = True
-                        else:
-                            raise Exception()
+                        _triplet = True
 
                     elif char == ")":
-                        if _is2x:
-                            _is2x = False
-                        else:
-                            raise Exception()
+                        _triplet = False
 
                     elif char == "[":
                         _bind = globalMs
@@ -114,10 +112,11 @@ def loadFromDict(object: Dict[str, str]):
                             pass
 
                     elif char == ",":
-                        globalMs += _beat
+                        globalMs += beat()
 
-                globalMs += _beat
-                _map["notes"].append(Division(ms=globalMs))
+                globalMs += beat()
+                if _barLine:
+                    _map["notes"].append(Division(ms=globalMs))
 
         maps[difficulty] = _map
 
