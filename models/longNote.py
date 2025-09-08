@@ -5,14 +5,14 @@ from utils import constants, settings, theme
 
 
 class LNEntity(Entity):
-    def __init__(self, note: LongNote, audio: Audio, spawnSpeed: float = 1.0, **kwargs):
+    def __init__(self, note: LongNote, spawnSpeed: float = 1.0, **kwargs):
         super().__init__(**kwargs)
-        self.audio = audio
         self.ms = note.ms
         self.length = note.length
         self.key = note.key
 
         self.holding = False
+        self.missed = False
 
         # ms→座標変換係数
         self.msToY = 0.03 * settings.playSpeed
