@@ -5,10 +5,13 @@ import time
 
 
 class ExAudio:
-    def __init__(self, name: str, volume: float = 1.0, pitch: float = 1.0):
+    def __init__(
+        self, name: str, volume: float = 1.0, pitch: float = 1.0, delay: float = 0.0
+    ):
         self.volume = volume
         self.pitch = pitch
         self.name = name
+        self.delay = delay
 
         self.song: AudioSegment = None
         self.samples: np.ndarray = None
@@ -23,7 +26,16 @@ class ExAudio:
         self._fade_start_volume = None
 
     def load(self):
-        self.song = AudioSegment.from_mp3(self.name)
+        song = AudioSegment.from_mp3(self.name)
+        silence = AudioSegment.silent(
+            duration=3000 - (self.delay * 0.1), frame_rate=song.frame_rate
+        )
+        silence = silence.set_channels(song.channels).set_sample_width(
+            song.sample_width
+        )
+
+        self.song = silence + song
+
         samples = np.array(self.song.get_array_of_samples(), dtype=np.float32)
 
         # ステレオ対応

@@ -41,7 +41,7 @@ def loadFromDict(object: Dict[str, str]):
         _barLine = True
         _triplet = False
         _bpm = float(bpm) if isinstance(bpm, str) else bpm
-        globalMs = startTime
+        globalMs = 3000 + startTime
 
         for data in map:
             p = (1e3 / (_bpm / 60)) * 4

@@ -15,7 +15,7 @@ class LNEntity(Entity):
         self.missed = False
 
         # ms→座標変換係数
-        self.msToY = 0.03 * settings.playSpeed
+        self.msToY = 0.035 * settings.playSpeed
 
         # 初期位置（y は GameScene.update が動かすのでダミー）
         self.position = (
@@ -55,6 +55,10 @@ class LNEntity(Entity):
         self.long.scale_y = length
         self.long.y = length / 2
         self.endNote.y = length
+
+    def update(self):
+        if self.y <= -10:
+            self.note.y = -10 - self.y
 
     def unload(self):
         destroy(self.note)

@@ -1,11 +1,15 @@
 import requests
 import os
 
-from ursina import Ursina
+from pathlib import Path
+from ursina import *
 
 from scenes.game import GameScene
 
-app = Ursina()
+application.asset_folder = Path("assets/")
+application._model_path.append_path(str(application.fonts_folder.resolve()))
+
+app = Ursina(title="sparebeat-player")
 
 currentScene = None
 
