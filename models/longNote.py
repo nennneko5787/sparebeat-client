@@ -21,7 +21,7 @@ class LNEntity(Entity):
         self.position = (
             constants.noteX[note.key],
             -10 - note.ms,
-            -0.03,
+            -0.6,
         )
 
         # ヘッド
@@ -30,7 +30,7 @@ class LNEntity(Entity):
             model="diamond",
             color=color.white,
             scale=(25 / 4, 2, 0),
-            position=(0, 0, 0),
+            position=(0, 0, -0.1),
         )
 
         # ロング本体 — 出現時の速度を反映
@@ -48,7 +48,7 @@ class LNEntity(Entity):
             model="diamond",
             color=color.white,
             scale=(25 / 4, 2, 0),
-            position=(0, (self.length * self.msToY * spawnSpeed), 0),
+            position=(0, (self.length * self.msToY * spawnSpeed), -0.1),
         )
 
     def updateLength(self, length: float):

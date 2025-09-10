@@ -4,7 +4,8 @@ from ursina.shaders import unlit_shader
 from sparebeat import loadFromFile, Note, Change, Division, LongNote
 from models.longNote import LNEntity
 from models.exAudio import ExAudio
-from typing import List
+from models.text3D import Text3D
+from typing import List, Literal
 from panda3d.core import FontPool
 
 from utils import constants, settings, theme
@@ -21,10 +22,11 @@ class GameScene(Entity):
             self.chart.maps["hard"]["events"], key=lambda e: e.ms
         )
 
-        self.perfects = 0
+        self.justs = 0
         self.rushes = 0
         self.cools = 0
         self.misses = 0
+        self.combo = 0
 
         self.score = 0
         self.maxScore = 0
@@ -49,7 +51,7 @@ class GameScene(Entity):
             model="cube",
             color=color.rgba32(232, 75, 156, 127),
             y=-10,
-            z=-0.02,
+            z=-0.3,
             scale=(25, 0.3, 0),
         )
 
@@ -59,7 +61,7 @@ class GameScene(Entity):
                 color=color.rgb32(103, 103, 103),
                 x=(-self.lane_half) + ((self.lane_half * 2 / 4) * (i + 1)),
                 y=-6,
-                z=-0.01,
+                z=-0.2,
                 scale=(0.1, 400, 0),
             )
             for i in range(3)
@@ -81,12 +83,26 @@ class GameScene(Entity):
 
         self.scoreText = Text(text="0000000")
         self.scoreText.size = 0.06
-        # self.scoreText.font = "NovaMono-Regular.ttf"
         self.scoreText._font = FontPool.load_font("assets/fonts/NovaMono-Regular.ttf")
         self.scoreText.origin = (0.5, 0.5)
         self.scoreText.position = (0.8, 0.45)
 
-        self.audio = ExAudio("temp/audio.mp3", volume=0.5, delay=self.chart.startTime)
+        self.comboValue = Text3D(
+            str(self.combo),
+            color=color.rgba32(255, 255, 255, 0.3),
+            font=FontPool.load_font("assets/fonts/NovaMono-Regular.ttf"),
+            scale=3,
+            x=0,
+            y=0,
+            z=-0.4,
+            origin=(0, 0, 0),
+        )
+        self.comboValue.origin = (0, 0)
+        self.comboValue.alpha = 0.5
+
+        self.audio = ExAudio(
+            "temp/audio.mp3", volume=0.5, pitch=1.0, delay=self.chart.startTime
+        )
         self.audio.load()
         self.audio.play()
 
@@ -121,6 +137,18 @@ class GameScene(Entity):
         total += (endMs - prevMs) * speed
         return -total if reverse else total
 
+    def showJudge(self, judge: Literal["just", "rush", "cool", "miss"], key: int):
+        entity = Entity(
+            model="cube",
+            texture=f"images/judges/{judge}",
+            position=(constants.noteX[key], 0, -0.005),
+            scale=((self.lane_half * 2 / 4), 2, 0),
+        )
+
+        entity.animate_y(2, duration=0.25, curve=curve.out_expo)
+        invoke(entity.fade_out, 0, 0.10, delay=0.25)
+        invoke(destroy, entity, delay=0.35)
+
     def removeNote(self, note: Entity, reason: str):
         if isinstance(note, LNEntity):
             note.unload()
@@ -129,21 +157,24 @@ class GameScene(Entity):
             self.notes.remove(note)
         if reason == "MISS":
             self.misses += 1
+            self.combo = 0
+            self.showJudge("miss", note.key)
 
     def judgeNote(self, note: Entity, currentMs: float):
         delta = currentMs - note.ms
+        self.combo += 1
         if abs(delta) < 35:
-            print("PERFECT")
             self.score += 1
-            self.perfects += 1
-        elif delta > -100:
-            print("RUSH")
+            self.justs += 1
+            self.showJudge("just", note.key)
+        elif delta > -100 and delta < -35:
             self.score += 0.5
             self.rushes += 1
+            self.showJudge("rush", note.key)
         else:
-            print("COOL")
             self.score += 0.5
             self.cools += 1
+            self.showJudge("cool", note.key)
 
     def loadNote(self, note, nowSpeed: float):
         if isinstance(note, Note):
@@ -158,7 +189,7 @@ class GameScene(Entity):
                 color=color_,
                 x=constants.noteX[note.key],
                 y=-10 - note.ms,
-                z=-0.03,
+                z=-0.6,
                 scale=((self.lane_half * 2 / 4), scale_y, 0),
             )
             entity.ms, entity.key = note.ms, note.key
@@ -171,7 +202,7 @@ class GameScene(Entity):
             entity = Entity(
                 model="cube",
                 color=color.rgb32(103, 103, 103),
-                position=(0, -10 - note.ms, -0.03),
+                position=(0, -10 - note.ms, -0.5),
                 scale=(25, 0.1, 0),
             )
             entity.ms, entity.key = note.ms, -1
@@ -232,17 +263,20 @@ class GameScene(Entity):
                     self.removeNote(note, "MISS")
             else:
                 if note.y < -20 * window.aspect_ratio:
-                    self.removeNote(note, "MISS")
+                    self.removeNote(note, "MISS" if note.key != -1 else "DIVISION")
 
         if settings.autoPlay:
             for note in self.notes.copy():
                 if note.key != -1 and currentMs - note.ms >= -30:
-                    self.removeNote(note, "PERFECT")
+                    self.removeNote(note, "JUST")
+                    self.showJudge("just", note.key)
 
         visibleScore = round(self.score / self.maxScore * 1e6)
         self.scoreText.text = (
             "1000000" if visibleScore == 1e6 else ("00000" + str(visibleScore))[-6:]
         )
+
+        self.comboValue.setText(str(self.combo))
 
         if (
             not self.notes
@@ -267,18 +301,19 @@ class GameScene(Entity):
                         and note.holding
                     ):
                         delta = currentMs - (note.ms + note.length)
+                        self.combo += 1
                         if abs(delta) <= 35:
-                            print("PERFECT")
                             self.score += 1
-                            self.perfects += 1
-                        elif delta > -100:
-                            print("RUSH")
+                            self.justs += 1
+                            self.showJudge("just", note.key)
+                        elif delta > -100 and delta < -35:
                             self.score += 0.5
                             self.rushes += 1
+                            self.showJudge("rush", note.key)
                         else:
-                            print("COOL")
                             self.score += 0.5
                             self.cools += 1
+                            self.showJudge("cool", note.key)
                         self.removeNote(note, "HIT")
                         return
             else:

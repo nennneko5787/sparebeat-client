@@ -28,7 +28,7 @@ class ExAudio:
     def load(self):
         song = AudioSegment.from_mp3(self.name)
         silence = AudioSegment.silent(
-            duration=3000 - (self.delay * 0.1), frame_rate=song.frame_rate
+            duration=3000 + (self.delay * 0.03), frame_rate=song.frame_rate
         )
         silence = silence.set_channels(song.channels).set_sample_width(
             song.sample_width

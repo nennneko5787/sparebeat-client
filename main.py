@@ -21,15 +21,15 @@ def load():
     currentScene = GameScene()
 
 
-print("Loading ずんだパーリナイ (24e25a9c)")
+print("Loading そにあずれこーど (69395856)")
 
 os.makedirs("temp/", exist_ok=True)
 with open("temp/audio.mp3", "wb") as f:
     f.write(
-        requests.get("https://beta.sparebeat.com/api/tracks/24e25a9c/audio").content
+        requests.get("https://beta.sparebeat.com/api/tracks/69395856/audio").content
     )
 with open("temp/map.json", "wb") as f:
-    f.write(requests.get("https://beta.sparebeat.com/api/tracks/24e25a9c/map").content)
+    f.write(requests.get("https://beta.sparebeat.com/api/tracks/69395856/map").content)
 
 
 load()
